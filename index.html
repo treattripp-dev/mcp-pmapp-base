@@ -208,10 +208,46 @@
                 transform: translateY(0);
             }
         }
+
+        .status-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ccc;
+        }
+
+        .status-connected .status-dot {
+            background-color: var(--success);
+        }
+
+        .status-disconnected .status-dot {
+            background-color: var(--danger);
+        }
     </style>
 </head>
 
 <body>
+
+    <div id="statusIndicator" class="status-indicator status-disconnected">
+        <div class="status-dot"></div>
+        <span id="statusText">Disconnected</span>
+    </div>
 
     <div class="container">
         <h1>Task Manager</h1>
@@ -222,319 +258,145 @@
         </div>
 
         <ul id="taskList">
+            <!-- Tasks will be injected here -->
+        </ul>
+        <div id="emptyState" class="empty-state" style="display: none;">No tasks yet. Add one above!</div>
+    </div>
 
-            .container {
-            width: 100%;
-            max-width: 500px;
-            background: var(--card-bg);
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-            padding: 2rem;
-            height: fit-content;
+    <div id="settingsModal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000;">
+        <div style="background: white; padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px;">
+            <h2 style="margin-top: 0;">Settings</h2>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem;">Backend URL</label>
+                <input type="text" id="backendUrlInput" placeholder="http://localhost:3000"
+                    style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <small style="color: #666; display: block; margin-top: 4px;">
+                    <b>Important:</b> If using on mobile, you cannot use 'localhost'.
+                    You must run your backend locally and expose it (e.g., via ngrok), then paste the public URL here.
+                </small>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeSettings()"
+                    style="padding: 8px 16px; border: 1px solid #ccc; background: white; border-radius: 6px; cursor: pointer;">Cancel</button>
+                <button onclick="saveSettings()"
+                    style="padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <button onclick="openSettings()"
+        style="position: fixed; bottom: 20px; right: 20px; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 90;">⚙️</button>
+
+    <script>
+        const taskListEl = document.getElementById('taskList');
+        const taskInput = document.getElementById('taskInput');
+        const addBtn = document.getElementById('addBtn');
+        const emptyState = document.getElementById('emptyState');
+        const settingsModal = document.getElementById('settingsModal');
+        const backendUrlInput = document.getElementById('backendUrlInput');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+
+        // --- Configuration ---
+        let BACKEND_URL = localStorage.getItem('task_backend_url') || 'http://localhost:3000';
+        let WS_URL = BACKEND_URL.replace(/^http/, 'ws');
+
+        function updateStatus(connected) {
+            if (connected) {
+                statusIndicator.className = 'status-indicator status-connected';
+                statusText.textContent = 'Connected';
+            } else {
+                statusIndicator.className = 'status-indicator status-disconnected';
+                statusText.textContent = 'Disconnected';
             }
+        }
 
-            h1 {
-            margin-top: 0;
-            font-size: 1.8rem;
-            color: var(--primary);
-            text-align: center;
-            margin-bottom: 1.5rem;
+        function openSettings() {
+            backendUrlInput.value = BACKEND_URL;
+            settingsModal.style.display = 'flex';
+        }
+
+        function closeSettings() {
+            settingsModal.style.display = 'none';
+        }
+
+        function saveSettings() {
+            let url = backendUrlInput.value.trim();
+            if (url) {
+                // Remove trailing slash
+                url = url.replace(/\/$/, '');
+                localStorage.setItem('task_backend_url', url);
+                BACKEND_URL = url;
+                WS_URL = url.replace(/^http/, 'ws');
+                window.location.reload(); // Reload to reconnect
             }
+        }
 
-            /* Add Task Form */
-            .input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 2rem;
+        // --- WebSocket for Real-time Updates ---
+        let ws;
+        function connectWs() {
+            console.log(`Connecting to WebSocket at ${WS_URL}`);
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                console.log('Connected to WebSocket');
+                updateStatus(true);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'update') {
+                    renderTasks(data.tasks);
+                }
+            };
+
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+                updateStatus(false);
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected. Retrying in 3s...');
+                updateStatus(false);
+                setTimeout(connectWs, 3000);
+            };
+        }
+
+        // Initial fetch to populate list before WS connects (or if WS fails)
+        fetchTasks();
+        connectWs();
+
+        async function fetchTasks() {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/tasks`);
+                if (res.ok) {
+                    const tasks = await res.json();
+                    renderTasks(tasks);
+                    updateStatus(true);
+                } else {
+                    updateStatus(false);
+                }
+            } catch (err) {
+                console.error("Failed to fetch initial tasks", err);
+                updateStatus(false);
             }
-
-            input[type="text"] {
-            flex-grow: 1;
-            padding: 12px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.2s;
-            }
-
-            input[type="text"]:focus {
-            border-color: var(--primary);
-            }
-
-            button.add-btn {
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            padding: 0 20px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-            }
-
-            button.add-btn:hover {
-            background-color: #357abd;
-            }
-
-            /* Task List */
-            ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            }
-
-            li {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border);
-            animation: fadeIn 0.3s ease;
-            }
-
-            li:last-child {
-            border-bottom: none;
-            }
-
-            .task-content {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-grow: 1;
-            }
-
-            .task-text {
-            font-size: 1.1rem;
-            transition: color 0.2s;
-            }
-
-            .completed .task-text {
-            text-decoration: line-through;
-            color: var(--text-secondary);
-            }
-
-            /* Checkbox */
-            .checkbox {
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--border);
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            }
-
-            .completed .checkbox {
-            background-color: var(--success);
-            border-color: var(--success);
-            }
-
-            .checkbox::after {
-            content: '✓';
-            color: white;
-            font-size: 12px;
-            display: none;
-            }
-
-            .completed .checkbox::after {
-            display: block;
-            }
-
-            /* Delete Button */
-            .delete-btn {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 5px;
-            border-radius: 4px;
-            transition: color 0.2s, background 0.2s;
-            }
-
-            .delete-btn:hover {
-            color: var(--danger);
-            background-color: rgba(220, 53, 69, 0.1);
-            }
-
-            .empty-state {
-            text-align: center;
-            color: var(--text-secondary);
-            margin-top: 2rem;
-            font-style: italic;
-            }
-
-            .description {
-            font-size: 0.85rem;
-            color: #666;
-            margin-top: 4px;
-            white-space: pre-wrap;
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            border-left: 3px solid var(--primary);
-            }
-
-            .execute-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 5px;
-            margin-right: 5px;
-            transition: transform 0.2s;
-            }
-
-            .execute-btn:hover {
-            transform: scale(1.1);
-            }
-
-            @keyframes fadeIn {
-            from {
-            opacity: 0;
-            transform: translateY(5px);
-            }
-
-            to {
-            opacity: 1;
-            transform: translateY(0);
-            }
-            }
-            </style>
-            </head>
-
-            <body>
-
-                <div class="container">
-                    <h1>Task Manager</h1>
-
-                    <div class="input-group">
-                        <input type="text" id="taskInput" placeholder="What needs to be done?" autofocus>
-                        <button class="add-btn" id="addBtn">Add</button>
-                    </div>
-
-                    <ul id="taskList">
-                        <!-- Tasks will be injected here -->
-                    </ul>
-                    <div id="emptyState" class="empty-state" style="display: none;">No tasks yet. Add one above!</div>
-                </div>
-
-                <div id="settingsModal"
-                    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
-                    <div style="background: white; padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px;">
-                        <h2 style="margin-top: 0;">Settings</h2>
-                        <div style="margin-bottom: 1rem;">
-                            <label style="display: block; margin-bottom: 0.5rem;">Backend URL</label>
-                            <input type="text" id="backendUrlInput" placeholder="http://localhost:3000"
-                                style="width: 100%; box-sizing: border-box;">
-                            <small style="color: #666;">Enter the URL of your backend (e.g., ngrok URL) if not running
-                                locally.</small>
-                        </div>
-                        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                            <button onclick="closeSettings()"
-                                style="padding: 8px 16px; border: 1px solid #ccc; background: white; border-radius: 6px; cursor: pointer;">Cancel</button>
-                            <button onclick="saveSettings()"
-                                style="padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">Save</button>
-                        </div>
-                    </div>
-                </div>
-
-                <button onclick="openSettings()"
-                    style="position: fixed; bottom: 20px; right: 20px; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">⚙️</button>
-
-                <script>
-                    const taskListEl = document.getElementById('taskList');
-                    const taskInput = document.getElementById('taskInput');
-                    const addBtn = document.getElementById('addBtn');
-                    const emptyState = document.getElementById('emptyState');
-                    const settingsModal = document.getElementById('settingsModal');
-                    const backendUrlInput = document.getElementById('backendUrlInput');
-
-                    // --- Configuration ---
-                    let BACKEND_URL = localStorage.getItem('task_backend_url') || 'http://localhost:3000';
-                    let WS_URL = BACKEND_URL.replace(/^http/, 'ws');
-
-                    function openSettings() {
-                        backendUrlInput.value = BACKEND_URL;
-                        settingsModal.style.display = 'flex';
-                    }
-
-                    function closeSettings() {
-                        settingsModal.style.display = 'none';
-                    }
-
-                    function saveSettings() {
-                        let url = backendUrlInput.value.trim();
-                        if (url) {
-                            // Remove trailing slash
-                            url = url.replace(/\/$/, '');
-                            localStorage.setItem('task_backend_url', url);
-                            BACKEND_URL = url;
-                            WS_URL = url.replace(/^http/, 'ws');
-                            window.location.reload(); // Reload to reconnect
-                        }
-                    }
-
-                    // --- WebSocket for Real-time Updates ---
-                    let ws;
-                    function connectWs() {
-                        console.log(`Connecting to WebSocket at ${WS_URL}`);
-                        ws = new WebSocket(WS_URL);
-
-                        ws.onopen = () => {
-                            console.log('Connected to WebSocket');
-                        };
-
-                        ws.onmessage = (event) => {
-                            const data = JSON.parse(event.data);
-                            if (data.type === 'update') {
-                                renderTasks(data.tasks);
-                            }
-                        };
-
-                        ws.onerror = (err) => {
-                            console.error('WebSocket error:', err);
-                        };
-
-                        ws.onclose = () => {
-                            console.log('WebSocket disconnected. Retrying in 3s...');
-                            setTimeout(connectWs, 3000);
-                        };
-                    }
-
-                    // Initial fetch to populate list before WS connects (or if WS fails)
-                    fetchTasks();
-                    connectWs();
-
-                    async function fetchTasks() {
-                        try {
-                            const res = await fetch(`${BACKEND_URL}/api/tasks`);
-                            if (res.ok) {
-                                const tasks = await res.json();
-                                renderTasks(tasks);
-                            }
-                        } catch (err) {
-                            console.error("Failed to fetch initial tasks", err);
-                        }
-                    }
+        }
 
 
-                    // --- Render Logic ---
-                    function renderTasks(tasks) {
-                        taskListEl.innerHTML = '';
+        // --- Render Logic ---
+        function renderTasks(tasks) {
+            taskListEl.innerHTML = '';
 
-                        if (tasks.length === 0) {
-                            emptyState.style.display = 'block';
-                        } else {
-                            emptyState.style.display = 'none';
-                            tasks.forEach(task => {
-                                const li = document.createElement('li');
-                                li.className = task.status === 'completed' ? 'completed' : '';
+            if (tasks.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+                tasks.forEach(task => {
+                    const li = document.createElement('li');
+                    li.className = task.status === 'completed' ? 'completed' : '';
 
-                                li.innerHTML = `
+                    li.innerHTML = `
                         <div class="task-content">
                             <div class="checkbox" onclick="toggleTask(${task.id}, '${task.status}')"></div>
                             <div style="flex-grow: 1;">
@@ -547,80 +409,80 @@
                             <button class="delete-btn" onclick="deleteTask(${task.id})" title="Delete">&times;</button>
                         </div>
                     `;
-                                taskListEl.appendChild(li);
-                            });
-                        }
-                    }
+                    taskListEl.appendChild(li);
+                });
+            }
+        }
 
-                    function escapeHtml(text) {
-                        const div = document.createElement('div');
-                        div.textContent = text;
-                        return div.innerHTML;
-                    }
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
-                    // --- API Interactions ---
+        // --- API Interactions ---
 
-                    addBtn.onclick = addTask;
-                    taskInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') addTask();
-                    });
+        addBtn.onclick = addTask;
+        taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addTask();
+        });
 
-                    async function addTask() {
-                        const title = taskInput.value.trim();
-                        if (!title) return;
+        async function addTask() {
+            const title = taskInput.value.trim();
+            if (!title) return;
 
-                        try {
-                            await fetch(`${BACKEND_URL}/api/tasks`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ title })
-                            });
-                            taskInput.value = ''; // Clear input
-                        } catch (err) {
-                            console.error("Failed to add task", err);
-                            alert("Failed to add task. Check backend connection.");
-                        }
-                    }
+            try {
+                await fetch(`${BACKEND_URL}/api/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title })
+                });
+                taskInput.value = ''; // Clear input
+            } catch (err) {
+                console.error("Failed to add task", err);
+                alert("Failed to add task. Check backend connection.");
+            }
+        }
 
-                    async function toggleTask(id, currentStatus) {
-                        const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
-                        try {
-                            await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: newStatus })
-                            });
-                        } catch (err) {
-                            console.error("Failed to update task", err);
-                        }
-                    }
+        async function toggleTask(id, currentStatus) {
+            const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
+            try {
+                await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+            } catch (err) {
+                console.error("Failed to update task", err);
+            }
+        }
 
-                    async function deleteTask(id) {
-                        try {
-                            await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
-                                method: 'DELETE'
-                            });
-                        } catch (err) {
-                            console.error("Failed to delete task", err);
-                        }
-                    }
+        async function deleteTask(id) {
+            try {
+                await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
+                    method: 'DELETE'
+                });
+            } catch (err) {
+                console.error("Failed to delete task", err);
+            }
+        }
 
-                    async function executeTask(id, btn) {
-                        const originalText = btn.innerText;
-                        btn.innerText = '⏳';
-                        btn.disabled = true;
-                        try {
-                            const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, { method: 'POST' });
-                            if (!res.ok) throw new Error((await res.json()).error);
-                        } catch (err) {
-                            console.error("Failed to execute task", err);
-                            alert("Execution failed: " + err.message);
-                        } finally {
-                            btn.innerText = originalText;
-                            btn.disabled = false;
-                        }
-                    }
-                </script>
-            </body>
+        async function executeTask(id, btn) {
+            const originalText = btn.innerText;
+            btn.innerText = '⏳';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, { method: 'POST' });
+                if (!res.ok) throw new Error((await res.json()).error);
+            } catch (err) {
+                console.error("Failed to execute task", err);
+                alert("Execution failed: " + err.message);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
 
 </html>
