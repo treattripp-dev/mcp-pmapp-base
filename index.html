@@ -369,7 +369,11 @@
 
         async function fetchTasks() {
             try {
-                const res = await fetch(`${BACKEND_URL}/api/tasks`);
+                const res = await fetch(`${BACKEND_URL}/api/tasks`, {
+                    headers: {
+                        'Bypass-Tunnel-Reminder': 'true'
+                    }
+                });
                 if (res.ok) {
                     const tasks = await res.json();
                     renderTasks(tasks);
@@ -434,7 +438,10 @@
             try {
                 await fetch(`${BACKEND_URL}/api/tasks`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Bypass-Tunnel-Reminder': 'true'
+                    },
                     body: JSON.stringify({ title })
                 });
                 taskInput.value = ''; // Clear input
@@ -449,7 +456,10 @@
             try {
                 await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Bypass-Tunnel-Reminder': 'true'
+                    },
                     body: JSON.stringify({ status: newStatus })
                 });
             } catch (err) {
@@ -460,7 +470,10 @@
         async function deleteTask(id) {
             try {
                 await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: {
+                        'Bypass-Tunnel-Reminder': 'true'
+                    }
                 });
             } catch (err) {
                 console.error("Failed to delete task", err);
@@ -472,7 +485,12 @@
             btn.innerText = '⏳';
             btn.disabled = true;
             try {
-                const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, { method: 'POST' });
+                const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Bypass-Tunnel-Reminder': 'true'
+                    }
+                });
                 if (!res.ok) throw new Error((await res.json()).error);
             } catch (err) {
                 console.error("Failed to execute task", err);
