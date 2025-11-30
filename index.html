@@ -4,127 +4,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Manager (MCP)</title>
+    <title>Project Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #4a90e2;
-            --bg: #f4f7f6;
-            --card-bg: #ffffff;
-            --text: #333;
-            --text-secondary: #888;
-            --border: #e1e4e8;
-            --success: #28a745;
-            --danger: #dc3545;
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --bg: #f8fafc;
+            --card-bg: rgba(255, 255, 255, 0.8);
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: rgba(255, 255, 255, 0.5);
+            --success: #10b981;
+            --danger: #ef4444;
+            --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: var(--bg);
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%);
             color: var(--text);
-            display: flex;
-            justify-content: center;
-            padding-top: 50px;
             margin: 0;
-            height: 100vh;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
         }
 
         .container {
             width: 100%;
-            max-width: 500px;
-            background: var(--card-bg);
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-            padding: 2rem;
-            height: fit-content;
+            max-width: 900px;
         }
 
-        h1 {
-            margin-top: 0;
-            font-size: 1.8rem;
-            color: var(--primary);
-            text-align: center;
-            margin-bottom: 1.5rem;
+        h1,
+        h2,
+        h3 {
+            margin: 0;
+            font-weight: 700;
         }
 
-        /* Add Task Form */
-        .input-group {
+        /* Header */
+        header {
             display: flex;
-            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 2rem;
+            width: 100%;
         }
 
-        input[type="text"] {
+        .app-title {
+            font-size: 2rem;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Glassmorphism Card */
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: var(--glass-shadow);
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        /* Dashboard Grid */
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .project-card {
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 180px;
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        .project-title {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+
+        .project-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
             flex-grow: 1;
-            padding: 12px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.2s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
         }
 
-        input[type="text"]:focus {
-            border-color: var(--primary);
+        /* Progress Bar */
+        .progress-container {
+            margin-top: 1rem;
         }
 
-        button.add-btn {
-            background-color: var(--primary);
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 4px;
+            transition: width 0.5s ease-out;
+        }
+
+        /* Buttons */
+        .btn {
+            background: var(--primary);
             color: white;
             border: none;
-            padding: 0 20px;
+            padding: 10px 20px;
             border-radius: 8px;
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        button.add-btn:hover {
-            background-color: #357abd;
+        .btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--text);
+            border: 1px solid #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #f1f5f9;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--danger);
+            padding: 4px;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Project View */
+        .project-view-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .back-btn:hover {
+            color: var(--primary);
         }
 
         /* Task List */
-        ul {
+        .task-list {
             list-style: none;
             padding: 0;
             margin: 0;
         }
 
-        li {
+        .task-item {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border);
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
             animation: fadeIn 0.3s ease;
         }
 
-        li:last-child {
+        .task-item:last-child {
             border-bottom: none;
         }
 
-        .task-content {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-grow: 1;
-        }
-
-        .task-text {
-            font-size: 1.1rem;
-            transition: color 0.2s;
-        }
-
-        .completed .task-text {
-            text-decoration: line-through;
-            color: var(--text-secondary);
-        }
-
-        /* Checkbox */
         .checkbox {
-            width: 20px;
-            height: 20px;
-            border: 2px solid var(--border);
-            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            border: 2px solid #cbd5e1;
+            border-radius: 6px;
+            margin-right: 1rem;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -132,81 +232,98 @@
             transition: all 0.2s;
         }
 
-        .completed .checkbox {
-            background-color: var(--success);
+        .task-item.completed .checkbox {
+            background: var(--success);
             border-color: var(--success);
         }
 
         .checkbox::after {
             content: '✓';
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             display: none;
         }
 
-        .completed .checkbox::after {
+        .task-item.completed .checkbox::after {
             display: block;
         }
 
-        /* Delete Button */
-        .delete-btn {
-            background: none;
-            border: none;
+        .task-content {
+            flex-grow: 1;
+        }
+
+        .task-title {
+            font-size: 1.1rem;
+            transition: color 0.2s;
+        }
+
+        .task-item.completed .task-title {
+            text-decoration: line-through;
             color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 5px;
-            border-radius: 4px;
-            transition: color 0.2s, background 0.2s;
         }
 
-        .delete-btn:hover {
-            color: var(--danger);
-            background-color: rgba(220, 53, 69, 0.1);
-        }
-
-        .empty-state {
-            text-align: center;
-            color: var(--text-secondary);
-            margin-top: 2rem;
-            font-style: italic;
-        }
-
-        .description {
+        .task-desc {
             font-size: 0.85rem;
-            color: #666;
+            color: var(--text-secondary);
             margin-top: 4px;
-            white-space: pre-wrap;
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            border-left: 3px solid var(--primary);
         }
 
-        .execute-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 5px;
-            margin-right: 5px;
+        /* Inputs */
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transform: scale(0.95);
             transition: transform 0.2s;
         }
 
-        .execute-btn:hover {
-            transform: scale(1.1);
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(5px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .modal-overlay.active .modal {
+            transform: scale(1);
         }
 
         .status-indicator {
@@ -220,7 +337,8 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            background: #fff;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(4px);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             z-index: 100;
         }
@@ -239,6 +357,24 @@
         .status-disconnected .status-dot {
             background-color: var(--danger);
         }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
     </style>
 </head>
 
@@ -250,57 +386,293 @@
     </div>
 
     <div class="container">
-        <h1>Task Manager</h1>
+        <header>
+            <div class="app-title">TaskFlow</div>
+            <button class="btn" onclick="openNewProjectModal()">+ New Project</button>
+        </header>
 
-        <div class="input-group">
-            <input type="text" id="taskInput" placeholder="What needs to be done?" autofocus>
-            <button class="add-btn" id="addBtn">Add</button>
+        <!-- Dashboard View -->
+        <div id="dashboardView">
+            <div id="projectGrid" class="project-grid">
+                <!-- Projects injected here -->
+            </div>
+            <div id="noProjects" class="empty-state" style="display: none;">
+                <h3>No projects yet</h3>
+                <p>Create your first project to get started.</p>
+            </div>
         </div>
 
-        <ul id="taskList">
-            <!-- Tasks will be injected here -->
-        </ul>
-        <div id="emptyState" class="empty-state" style="display: none;">No tasks yet. Add one above!</div>
+        <!-- Project Detail View -->
+        <div id="projectView" style="display: none;">
+            <div class="project-view-header">
+                <button class="back-btn" onclick="showDashboard()">←</button>
+                <h2 id="currentProjectTitle">Project Title</h2>
+            </div>
+
+            <div class="glass-card">
+                <div style="display: flex; gap: 10px; margin-bottom: 1.5rem;">
+                    <input type="text" id="taskInput" placeholder="Add a new task..."
+                        onkeypress="if(event.key === 'Enter') addTask()">
+                    <button class="btn" onclick="addTask()">Add</button>
+                </div>
+
+                <ul id="taskList" class="task-list">
+                    <!-- Tasks injected here -->
+                </ul>
+                <div id="noTasks" class="empty-state" style="display: none;">
+                    No tasks in this project.
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="settingsModal"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000;">
-        <div style="background: white; padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px;">
-            <h2 style="margin-top: 0;">Settings</h2>
+    <!-- New Project Modal -->
+    <div id="newProjectModal" class="modal-overlay">
+        <div class="modal">
+            <h2 style="margin-bottom: 1.5rem;">Create Project</h2>
             <div style="margin-bottom: 1rem;">
-                <label style="display: block; margin-bottom: 0.5rem;">Backend URL</label>
-                <input type="text" id="backendUrlInput" placeholder="http://localhost:3000"
-                    style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-                <small style="color: #666; display: block; margin-top: 4px;">
-                    <b>Important:</b> If using on mobile, you cannot use 'localhost'.
-                    You must run your backend locally and expose it (e.g., via ngrok), then paste the public URL here.
-                </small>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Title</label>
+                <input type="text" id="newProjectTitle" placeholder="e.g., Website Redesign" autofocus>
+            </div>
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Description</label>
+                <textarea id="newProjectDesc" rows="3" placeholder="Optional description..."></textarea>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                <button onclick="closeSettings()"
-                    style="padding: 8px 16px; border: 1px solid #ccc; background: white; border-radius: 6px; cursor: pointer;">Cancel</button>
-                <button onclick="saveSettings()"
-                    style="padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">Save</button>
+                <button class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
+                <button class="btn" onclick="createProject()">Create</button>
             </div>
         </div>
     </div>
 
-    <button onclick="openSettings()"
-        style="position: fixed; bottom: 20px; right: 20px; background: white; border: 1px solid #ccc; padding: 10px; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 90;">⚙️</button>
-
     <script>
+        // State
+        let currentProjectId = null;
+        let projects = [];
+        let tasks = [];
+
+        // Elements
+        const dashboardView = document.getElementById('dashboardView');
+        const projectView = document.getElementById('projectView');
+        const projectGrid = document.getElementById('projectGrid');
         const taskListEl = document.getElementById('taskList');
-        const taskInput = document.getElementById('taskInput');
-        const addBtn = document.getElementById('addBtn');
-        const emptyState = document.getElementById('emptyState');
-        const settingsModal = document.getElementById('settingsModal');
-        const backendUrlInput = document.getElementById('backendUrlInput');
+        const currentProjectTitle = document.getElementById('currentProjectTitle');
+        const newProjectModal = document.getElementById('newProjectModal');
         const statusIndicator = document.getElementById('statusIndicator');
         const statusText = document.getElementById('statusText');
 
-        // --- Configuration ---
-        let BACKEND_URL = localStorage.getItem('task_backend_url') || 'http://localhost:3000';
-        let WS_URL = BACKEND_URL.replace(/^http/, 'ws');
+        // Config
+        const BACKEND_URL = 'http://localhost:3000';
+        const WS_URL = 'ws://localhost:3000';
+
+        // --- Navigation ---
+
+        function showDashboard() {
+            currentProjectId = null;
+            projectView.style.display = 'none';
+            dashboardView.style.display = 'block';
+            fetchProjects();
+        }
+
+        function showProject(id) {
+            currentProjectId = id;
+            const project = projects.find(p => p.id === id);
+            if (project) {
+                currentProjectTitle.textContent = project.title;
+                dashboardView.style.display = 'none';
+                projectView.style.display = 'block';
+                fetchTasks(id);
+            }
+        }
+
+        function openNewProjectModal() {
+            document.getElementById('newProjectTitle').value = '';
+            document.getElementById('newProjectDesc').value = '';
+            newProjectModal.classList.add('active');
+            setTimeout(() => document.getElementById('newProjectTitle').focus(), 100);
+        }
+
+        function closeNewProjectModal() {
+            newProjectModal.classList.remove('active');
+        }
+
+        // --- API & Logic ---
+
+        async function fetchProjects() {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/projects`);
+                if (res.ok) {
+                    projects = await res.json();
+                    renderProjects();
+                    updateStatus(true);
+                }
+            } catch (err) {
+                console.error(err);
+                updateStatus(false);
+            }
+        }
+
+        async function createProject() {
+            const title = document.getElementById('newProjectTitle').value.trim();
+            const description = document.getElementById('newProjectDesc').value.trim();
+            if (!title) return;
+
+            try {
+                await fetch(`${BACKEND_URL}/api/projects`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, description })
+                });
+                closeNewProjectModal();
+                // WS will trigger update, but we can fetch manually too
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteProject(e, id) {
+            e.stopPropagation();
+            if (!confirm('Delete this project and all its tasks?')) return;
+
+            try {
+                await fetch(`${BACKEND_URL}/api/projects/${id}`, { method: 'DELETE' });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function fetchTasks(projectId) {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/tasks?project_id=${projectId}`);
+                if (res.ok) {
+                    tasks = await res.json();
+                    renderTasks();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function addTask() {
+            const input = document.getElementById('taskInput');
+            const title = input.value.trim();
+            if (!title || !currentProjectId) return;
+
+            try {
+                await fetch(`${BACKEND_URL}/api/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, project_id: currentProjectId })
+                });
+                input.value = '';
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function toggleTask(id, currentStatus) {
+            const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
+            try {
+                await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteTask(id) {
+            try {
+                await fetch(`${BACKEND_URL}/api/tasks/${id}`, { method: 'DELETE' });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function executeTask(id, btn) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, { method: 'POST' });
+                if (!res.ok) throw new Error((await res.json()).error);
+            } catch (err) {
+                alert("Execution failed: " + err.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // --- Rendering ---
+
+        function renderProjects() {
+            projectGrid.innerHTML = '';
+            if (projects.length === 0) {
+                document.getElementById('noProjects').style.display = 'block';
+                return;
+            }
+            document.getElementById('noProjects').style.display = 'none';
+
+            projects.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'glass-card project-card';
+                card.onclick = () => showProject(p.id);
+
+                card.innerHTML = `
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:start;">
+                            <div class="project-title">${escapeHtml(p.title)}</div>
+                            <button class="btn-danger" onclick="deleteProject(event, ${p.id})" title="Delete Project">&times;</button>
+                        </div>
+                        <div class="project-desc">${escapeHtml(p.description || '')}</div>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>Progress</span>
+                            <span>${p.progress}%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: ${p.progress}%"></div>
+                        </div>
+                    </div>
+                `;
+                projectGrid.appendChild(card);
+            });
+        }
+
+        function renderTasks() {
+            taskListEl.innerHTML = '';
+            if (tasks.length === 0) {
+                document.getElementById('noTasks').style.display = 'block';
+                return;
+            }
+            document.getElementById('noTasks').style.display = 'none';
+
+            tasks.forEach(t => {
+                const li = document.createElement('li');
+                li.className = `task-item ${t.status === 'completed' ? 'completed' : ''}`;
+                li.innerHTML = `
+                    <div class="checkbox" onclick="toggleTask(${t.id}, '${t.status}')"></div>
+                    <div class="task-content">
+                        <div class="task-title">${escapeHtml(t.title)}</div>
+                        ${t.description ? `<div class="task-desc">${escapeHtml(t.description)}</div>` : ''}
+                    </div>
+                    <button class="btn-secondary" style="padding: 5px 10px; margin-right: 5px;" onclick="executeTask(${t.id}, this)">▶️</button>
+                    <button class="btn-danger" onclick="deleteTask(${t.id})">&times;</button>
+                `;
+                taskListEl.appendChild(li);
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
         function updateStatus(connected) {
             if (connected) {
@@ -312,194 +684,36 @@
             }
         }
 
-        function openSettings() {
-            backendUrlInput.value = BACKEND_URL;
-            settingsModal.style.display = 'flex';
-        }
+        // --- WebSocket ---
 
-        function closeSettings() {
-            settingsModal.style.display = 'none';
-        }
-
-        function saveSettings() {
-            let url = backendUrlInput.value.trim();
-            if (url) {
-                // Remove trailing slash
-                url = url.replace(/\/$/, '');
-                localStorage.setItem('task_backend_url', url);
-                BACKEND_URL = url;
-                WS_URL = url.replace(/^http/, 'ws');
-                window.location.reload(); // Reload to reconnect
-            }
-        }
-
-        // --- WebSocket for Real-time Updates ---
         let ws;
         function connectWs() {
-            console.log(`Connecting to WebSocket at ${WS_URL}`);
             ws = new WebSocket(WS_URL);
-
-            ws.onopen = () => {
-                console.log('Connected to WebSocket');
-                updateStatus(true);
-            };
-
+            ws.onopen = () => updateStatus(true);
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === 'update') {
-                    renderTasks(data.tasks);
+                if (data.type === 'update_projects') {
+                    projects = data.projects;
+                    if (!currentProjectId) renderProjects();
+                }
+                if (data.type === 'update_tasks') {
+                    // Only update if we are viewing the relevant project
+                    if (currentProjectId && data.projectId === currentProjectId) {
+                        tasks = data.tasks;
+                        renderTasks();
+                    }
                 }
             };
-
-            ws.onerror = (err) => {
-                console.error('WebSocket error:', err);
-                updateStatus(false);
-            };
-
             ws.onclose = () => {
-                console.log('WebSocket disconnected. Retrying in 3s...');
                 updateStatus(false);
                 setTimeout(connectWs, 3000);
             };
         }
 
-        // Initial fetch to populate list before WS connects (or if WS fails)
-        fetchTasks();
+        // Init
+        fetchProjects();
         connectWs();
 
-        async function fetchTasks() {
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/tasks`, {
-                    headers: {
-                        'Bypass-Tunnel-Reminder': 'true'
-                    }
-                });
-                if (res.ok) {
-                    const tasks = await res.json();
-                    renderTasks(tasks);
-                    updateStatus(true);
-                } else {
-                    updateStatus(false);
-                }
-            } catch (err) {
-                console.error("Failed to fetch initial tasks", err);
-                updateStatus(false);
-            }
-        }
-
-
-        // --- Render Logic ---
-        function renderTasks(tasks) {
-            taskListEl.innerHTML = '';
-
-            if (tasks.length === 0) {
-                emptyState.style.display = 'block';
-            } else {
-                emptyState.style.display = 'none';
-                tasks.forEach(task => {
-                    const li = document.createElement('li');
-                    li.className = task.status === 'completed' ? 'completed' : '';
-
-                    li.innerHTML = `
-                        <div class="task-content">
-                            <div class="checkbox" onclick="toggleTask(${task.id}, '${task.status}')"></div>
-                            <div style="flex-grow: 1;">
-                                <div class="task-text">${escapeHtml(task.title)}</div>
-                                ${task.description ? `<div class="description">${escapeHtml(task.description)}</div>` : ''}
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center;">
-                            <button class="execute-btn" onclick="executeTask(${task.id}, this)" title="Execute via CLI">▶️</button>
-                            <button class="delete-btn" onclick="deleteTask(${task.id})" title="Delete">&times;</button>
-                        </div>
-                    `;
-                    taskListEl.appendChild(li);
-                });
-            }
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // --- API Interactions ---
-
-        addBtn.onclick = addTask;
-        taskInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') addTask();
-        });
-
-        async function addTask() {
-            const title = taskInput.value.trim();
-            if (!title) return;
-
-            try {
-                await fetch(`${BACKEND_URL}/api/tasks`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Bypass-Tunnel-Reminder': 'true'
-                    },
-                    body: JSON.stringify({ title })
-                });
-                taskInput.value = ''; // Clear input
-            } catch (err) {
-                console.error("Failed to add task", err);
-                alert("Failed to add task. Check backend connection.");
-            }
-        }
-
-        async function toggleTask(id, currentStatus) {
-            const newStatus = currentStatus === 'pending' ? 'completed' : 'pending';
-            try {
-                await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Bypass-Tunnel-Reminder': 'true'
-                    },
-                    body: JSON.stringify({ status: newStatus })
-                });
-            } catch (err) {
-                console.error("Failed to update task", err);
-            }
-        }
-
-        async function deleteTask(id) {
-            try {
-                await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Bypass-Tunnel-Reminder': 'true'
-                    }
-                });
-            } catch (err) {
-                console.error("Failed to delete task", err);
-            }
-        }
-
-        async function executeTask(id, btn) {
-            const originalText = btn.innerText;
-            btn.innerText = '⏳';
-            btn.disabled = true;
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, {
-                    method: 'POST',
-                    headers: {
-                        'Bypass-Tunnel-Reminder': 'true'
-                    }
-                });
-                if (!res.ok) throw new Error((await res.json()).error);
-            } catch (err) {
-                console.error("Failed to execute task", err);
-                alert("Execution failed: " + err.message);
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-            }
-        }
     </script>
 </body>
 

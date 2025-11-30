@@ -30,22 +30,69 @@ const wss = new WebSocketServer({ server });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-// --- REST API for Frontend ---
+// --- REST API for Projects ---
+
+app.get('/api/projects', async (req, res) => {
+    const { data: projects, error } = await supabase
+        .from('projects')
+        .select('*, tasks(id, status)')
+        .order('created_at');
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Calculate progress
+    const projectsWithProgress = projects.map(p => {
+        const totalTasks = p.tasks.length;
+        const completedTasks = p.tasks.filter(t => t.status === 'completed').length;
+        const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+        return { ...p, progress, totalTasks, completedTasks };
+    });
+
+    res.json(projectsWithProgress);
+});
+
+app.post('/api/projects', async (req, res) => {
+    const { title, description } = req.body;
+    if (!title) return res.status(400).json({ error: "Title is required" });
+
+    const { data, error } = await supabase.from('projects').insert({ name: title, description }).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    broadcastProjects();
+    res.status(201).json(data);
+});
+
+app.delete('/api/projects/:id', async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) return res.status(500).json({ error: error.message });
+
+    broadcastProjects();
+    res.status(204).send();
+});
+
+// --- REST API for Tasks ---
 
 app.get('/api/tasks', async (req, res) => {
-    const { data, error } = await supabase.from('tasks').select('*').order('id');
+    let query = supabase.from('tasks').select('*').order('id');
+    if (req.query.project_id) {
+        query = query.eq('project_id', req.query.project_id);
+    }
+    const { data, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
 });
 
 app.post('/api/tasks', async (req, res) => {
-    const { title, description } = req.body;
+    const { title, description, project_id } = req.body;
     if (!title) return res.status(400).json({ error: "Title is required" });
+    if (!project_id) return res.status(400).json({ error: "Project ID is required" });
 
-    const { data, error } = await supabase.from('tasks').insert({ title, description }).select().single();
+    const { data, error } = await supabase.from('tasks').insert({ title, description, project_id }).select().single();
     if (error) return res.status(500).json({ error: error.message });
 
-    broadcastTasks();
+    broadcastTasks(null, project_id);
+    broadcastProjects();
     res.status(201).json(data);
 });
 
@@ -59,16 +106,23 @@ app.put('/api/tasks/:id', async (req, res) => {
     const { data, error } = await supabase.from('tasks').update(updates).eq('id', id).select().single();
     if (error) return res.status(500).json({ error: error.message });
 
-    broadcastTasks();
+    broadcastTasks(null, data.project_id);
+    broadcastProjects();
     res.json(data);
 });
 
 app.delete('/api/tasks/:id', async (req, res) => {
     const id = parseInt(req.params.id);
+    // Get task first to know project_id for broadcast
+    const { data: task } = await supabase.from('tasks').select('project_id').eq('id', id).single();
+
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) return res.status(500).json({ error: error.message });
 
-    broadcastTasks();
+    if (task) {
+        broadcastTasks(null, task.project_id);
+        broadcastProjects();
+    }
     res.status(204).send();
 });
 
@@ -88,8 +142,6 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
     exec(command, async (error, stdout, stderr) => {
         if (error) {
             console.error(`Execution error: ${error.message}`);
-            // We might want to save the error to the description too, or just return 500
-            // For now, let's return 500 but log it.
             return res.status(500).json({ error: `Execution failed: ${error.message}` });
         }
         if (stderr) {
@@ -109,24 +161,31 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
 
         if (updateError) return res.status(500).json({ error: updateError.message });
 
-        broadcastTasks();
+        broadcastTasks(null, updatedTask.project_id);
+        broadcastProjects();
         res.json(updatedTask);
     });
 });
 
 // --- WebSocket Logic ---
 wss.on('connection', (ws) => {
-    broadcastTasks(ws);
+    // Optionally send initial state? 
+    // For now, client fetches initial state via REST.
 });
 
-async function broadcastTasks(targetClient = null) {
-    const { data: tasks, error } = await supabase.from('tasks').select('*').order('id');
+async function broadcastTasks(targetClient = null, projectId = null) {
+    let query = supabase.from('tasks').select('*').order('id');
+    if (projectId) {
+        query = query.eq('project_id', projectId);
+    }
+    const { data: tasks, error } = await query;
+
     if (error) {
         console.error("Failed to fetch tasks for broadcast:", error);
         return;
     }
 
-    const message = JSON.stringify({ type: 'update', tasks });
+    const message = JSON.stringify({ type: 'update_tasks', tasks, projectId });
 
     if (targetClient) {
         if (targetClient.readyState === 1) targetClient.send(message);
@@ -135,6 +194,27 @@ async function broadcastTasks(targetClient = null) {
             if (client.readyState === 1) client.send(message);
         });
     }
+}
+
+async function broadcastProjects() {
+    const { data: projects, error } = await supabase
+        .from('projects')
+        .select('*, tasks(id, status)')
+        .order('created_at');
+
+    if (error) return;
+
+    const projectsWithProgress = projects.map(p => {
+        const totalTasks = p.tasks.length;
+        const completedTasks = p.tasks.filter(t => t.status === 'completed').length;
+        const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+        return { ...p, progress, totalTasks, completedTasks };
+    });
+
+    const message = JSON.stringify({ type: 'update_projects', projects: projectsWithProgress });
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) client.send(message);
+    });
 }
 
 server.listen(3000, () => {
@@ -151,20 +231,43 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
         tools: [
             {
-                name: "add_task",
-                description: "Add a new task to the list",
+                name: "add_project",
+                description: "Create a new project",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        title: { type: "string", description: "Title of the task" }
+                        title: { type: "string", description: "Project title" },
+                        description: { type: "string", description: "Project description" }
                     },
                     required: ["title"]
                 },
             },
             {
-                name: "list_tasks",
-                description: "List all current tasks",
+                name: "list_projects",
+                description: "List all projects",
                 inputSchema: { type: "object", properties: {} },
+            },
+            {
+                name: "add_task",
+                description: "Add a new task to a project",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        title: { type: "string", description: "Title of the task" },
+                        project_id: { type: "number", description: "ID of the project to add the task to" }
+                    },
+                    required: ["title", "project_id"]
+                },
+            },
+            {
+                name: "list_tasks",
+                description: "List tasks for a project",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        project_id: { type: "number", description: "Project ID to filter by" }
+                    }
+                },
             },
             {
                 name: "update_task",
@@ -196,17 +299,37 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
+    if (name === "add_project") {
+        const { title, description } = args;
+        const { data, error } = await supabase.from('projects').insert({ name: title, description }).select().single();
+        if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
+        broadcastProjects();
+        return { content: [{ type: "text", text: `Project created: #${data.id} - ${data.name}` }] };
+    }
+
+    if (name === "list_projects") {
+        const { data: projects, error } = await supabase.from('projects').select('*').order('created_at');
+        if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
+        const list = projects.map(p => `#${p.id}: ${p.name || p.title}`).join('\n');
+        return { content: [{ type: "text", text: list || "No projects found." }] };
+    }
+
     if (name === "add_task") {
-        const { title } = args;
-        const { data, error } = await supabase.from('tasks').insert({ title }).select().single();
+        const { title, project_id } = args;
+        const { data, error } = await supabase.from('tasks').insert({ title, project_id }).select().single();
         if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
 
-        broadcastTasks();
-        return { content: [{ type: "text", text: `Task added: #${data.id} - ${data.title}` }] };
+        broadcastTasks(null, project_id);
+        broadcastProjects();
+        return { content: [{ type: "text", text: `Task added to Project #${project_id}: #${data.id} - ${data.title}` }] };
     }
 
     if (name === "list_tasks") {
-        const { data: tasks, error } = await supabase.from('tasks').select('*').order('id');
+        let query = supabase.from('tasks').select('*').order('id');
+        if (args.project_id) {
+            query = query.eq('project_id', args.project_id);
+        }
+        const { data: tasks, error } = await query;
         if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
 
         const taskList = tasks.map(t => `[${t.status === 'completed' ? 'X' : ' '}] #${t.id}: ${t.title}`).join('\n');
@@ -218,21 +341,27 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { data, error } = await supabase.from('tasks').update({ status }).eq('id', id).select().single();
         if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
 
-        broadcastTasks();
+        broadcastTasks(null, data.project_id);
+        broadcastProjects();
         return { content: [{ type: "text", text: `Task #${id} updated to ${status}` }] };
     }
 
     if (name === "delete_task") {
         const { id } = args;
+        const { data: task } = await supabase.from('tasks').select('project_id').eq('id', id).single();
         const { error } = await supabase.from('tasks').delete().eq('id', id);
         if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
 
-        broadcastTasks();
+        if (task) {
+            broadcastTasks(null, task.project_id);
+            broadcastProjects();
+        }
         return { content: [{ type: "text", text: `Task #${id} deleted` }] };
     }
 
     throw new Error("Tool not found");
 });
+
 
 const transport = new StdioServerTransport();
 await mcpServer.connect(transport);
