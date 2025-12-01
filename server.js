@@ -24,9 +24,23 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Web Server
 const app = express();
 app.use(express.json()); // Enable JSON body parsing
-app.use(cors()); // Enable CORS for all origins
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        // Allow localhost and localtunnel domains
+        if (origin.startsWith('http://localhost') || origin.includes('.loca.lt')) {
+            return callback(null, true);
+        }
+        callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+}));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
+// Serve static files (css, js)
+app.use(express.static(__dirname));
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
@@ -63,7 +77,7 @@ app.post('/api/projects', async (req, res) => {
 });
 
 app.delete('/api/projects/:id', async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = req.params.id; // UUID is a string
     const { error } = await supabase.from('projects').delete().eq('id', id);
     if (error) return res.status(500).json({ error: error.message });
 
@@ -97,7 +111,7 @@ app.post('/api/tasks', async (req, res) => {
 });
 
 app.put('/api/tasks/:id', async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = req.params.id; // UUID is a string
     const updates = {};
     if (req.body.status) updates.status = req.body.status;
     if (req.body.title) updates.title = req.body.title;
@@ -112,7 +126,7 @@ app.put('/api/tasks/:id', async (req, res) => {
 });
 
 app.delete('/api/tasks/:id', async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = req.params.id; // UUID is a string
     // Get task first to know project_id for broadcast
     const { data: task } = await supabase.from('tasks').select('project_id').eq('id', id).single();
 
@@ -128,7 +142,7 @@ app.delete('/api/tasks/:id', async (req, res) => {
 
 // --- Execute Endpoint ---
 app.post('/api/tasks/:id/execute', async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = req.params.id; // UUID is a string
 
     // 1. Get the task
     const { data: task, error: fetchError } = await supabase.from('tasks').select('*').eq('id', id).single();
@@ -254,7 +268,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
                     type: "object",
                     properties: {
                         title: { type: "string", description: "Title of the task" },
-                        project_id: { type: "number", description: "ID of the project to add the task to" }
+                        project_id: { type: "string", description: "ID of the project to add the task to" }
                     },
                     required: ["title", "project_id"]
                 },
@@ -265,8 +279,9 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        project_id: { type: "number", description: "Project ID to filter by" }
+                        project_id: { type: "string", description: "Project ID to filter by" }
                     }
+                    // No required properties, project_id is optional
                 },
             },
             {
@@ -275,7 +290,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        id: { type: "number", description: "ID of the task to update" },
+                        id: { type: "string", description: "ID of the task to update" },
                         status: { type: "string", enum: ["pending", "completed"], description: "New status" }
                     },
                     required: ["id", "status"]
@@ -287,7 +302,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        id: { type: "number", description: "ID of the task to delete" }
+                        id: { type: "string", description: "ID of the task to delete" }
                     },
                     required: ["id"]
                 },
