@@ -90,6 +90,7 @@ Real-time updates are handled via the `ws` library.
 ## 5. Server Startup
 - **`server.listen(3000, ...)`**: Starts the HTTP server on port 3000.
     - **Note**: To prevent crashes when running as a subprocess (e.g., during `gemini run`), error handling for `EADDRINUSE` should be implemented here.
+    - **CRITICAL**: When handling `EADDRINUSE`, do **NOT** use `console.log`. This writes to `stdout`, which corrupts the MCP protocol (JSON-RPC) used by the CLI. The subprocess must exit silently or log only to `stderr` (using `console.error` or `console.warn`), but silence is safest to avoid CLI error detection.
 
 ## 6. MCP Server
 The file implements an MCP server to expose tools to AI agents.

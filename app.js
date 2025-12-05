@@ -33,7 +33,7 @@ function showProject(id) {
     currentProjectId = id;
     const project = projects.find(p => p.id === id);
     if (project) {
-        currentProjectTitle.textContent = project.title;
+        currentProjectTitle.textContent = project.name;
         dashboardView.style.display = 'none';
         projectView.style.display = 'block';
         fetchTasks(id);
@@ -203,7 +203,7 @@ function renderProjects() {
         card.innerHTML = `
                     <div>
                         <div style="display:flex; justify-content:space-between; align-items:start;">
-                            <div class="project-title">${escapeHtml(p.title)}</div>
+                            <div class="project-title">${escapeHtml(p.name)}</div>
                             <button class="btn-danger" onclick="deleteProject(event, ${p.id})" title="Delete Project">&times;</button>
                         </div>
                         <div class="project-desc">${escapeHtml(p.description || '')}</div>
