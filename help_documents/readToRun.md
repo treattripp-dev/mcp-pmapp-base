@@ -44,7 +44,7 @@ Add the following configuration to your Gemini settings file (usually `C:\Users\
 
 ## 5. Mobile Connection (Localtunnel)
 To control the app from your phone, you need to expose your local backend.
-
+for local only http://localhost:3000
 1.  Open a **new** terminal window.
 2.  Run Localtunnel:
     ```bash

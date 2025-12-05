@@ -37,7 +37,7 @@ app.use(cors({
     credentials: true
 }));
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+let wss = null;
 
 // Serve static files (css, js)
 app.use(express.static(__dirname));
@@ -182,12 +182,9 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
 });
 
 // --- WebSocket Logic ---
-wss.on('connection', (ws) => {
-    // Optionally send initial state? 
-    // For now, client fetches initial state via REST.
-});
-
 async function broadcastTasks(targetClient = null, projectId = null) {
+    if (!wss) return; // Skip if WebSocket server is not initialized
+
     let query = supabase.from('tasks').select('*').order('id');
     if (projectId) {
         query = query.eq('project_id', projectId);
@@ -211,6 +208,8 @@ async function broadcastTasks(targetClient = null, projectId = null) {
 }
 
 async function broadcastProjects() {
+    if (!wss) return; // Skip if WebSocket server is not initialized
+
     const { data: projects, error } = await supabase
         .from('projects')
         .select('*, tasks(id, status)')
@@ -231,8 +230,30 @@ async function broadcastProjects() {
     });
 }
 
-server.listen(3000, () => {
+const httpServer = server.listen(3000, () => {
     console.error(`Task App running at http://localhost:3000`);
+
+    // Initialize WebSocketServer only after successful listen
+    wss = new WebSocketServer({ server });
+
+    wss.on('connection', (ws) => {
+        // Optionally send initial state? 
+        // For now, client fetches initial state via REST.
+    });
+
+    wss.on('error', (e) => {
+        console.error('WebSocketServer error:', e);
+    });
+});
+
+httpServer.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+        // Use console.log instead of console.error to avoid triggering CLI error detection
+        console.log('Port 3000 is already in use. Assuming this is a subprocess for MCP tools and skipping web server start.');
+    } else {
+        console.error('Server error:', e);
+        process.exit(1);
+    }
 });
 
 // --- MCP Server ---
