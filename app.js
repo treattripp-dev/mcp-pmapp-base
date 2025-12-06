@@ -200,24 +200,67 @@ function renderProjects() {
         card.className = 'glass-card project-card';
         card.onclick = () => showProject(p.id);
 
-        card.innerHTML = `
-                    <div>
-                        <div style="display:flex; justify-content:space-between; align-items:start;">
-                            <div class="project-title">${escapeHtml(p.name)}</div>
-                            <button class="btn-danger" onclick="deleteProject(event, ${p.id})" title="Delete Project">&times;</button>
-                        </div>
-                        <div class="project-desc">${escapeHtml(p.description || '')}</div>
-                    </div>
-                    <div class="progress-container">
-                        <div class="progress-label">
-                            <span>Progress</span>
-                            <span>${p.progress}%</span>
-                        </div>
-                        <div class="progress-bar-bg">
-                            <div class="progress-bar-fill" style="width: ${p.progress}%"></div>
-                        </div>
-                    </div>
-                `;
+        // Content Container
+        const content = document.createElement('div');
+
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = "display:flex; justify-content:space-between; align-items:start;";
+
+        const title = document.createElement('div');
+        title.className = 'project-title';
+        title.textContent = p.name;
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-danger';
+        deleteBtn.innerHTML = '&times;';
+        deleteBtn.title = 'Delete Project';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteProject(e, p.id);
+        };
+
+        header.appendChild(title);
+        header.appendChild(deleteBtn);
+
+        // Description
+        const desc = document.createElement('div');
+        desc.className = 'project-desc';
+        desc.textContent = p.description || '';
+
+        content.appendChild(header);
+        content.appendChild(desc);
+
+        // Progress Container
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+
+        const progressLabel = document.createElement('div');
+        progressLabel.className = 'progress-label';
+
+        const labelText = document.createElement('span');
+        labelText.textContent = 'Progress';
+        const labelValue = document.createElement('span');
+        labelValue.textContent = `${p.progress}%`;
+
+        progressLabel.appendChild(labelText);
+        progressLabel.appendChild(labelValue);
+
+        const progressBarBg = document.createElement('div');
+        progressBarBg.className = 'progress-bar-bg';
+
+        const progressBarFill = document.createElement('div');
+        progressBarFill.className = 'progress-bar-fill';
+        progressBarFill.style.width = `${p.progress}%`;
+
+        progressBarBg.appendChild(progressBarFill);
+
+        progressContainer.appendChild(progressLabel);
+        progressContainer.appendChild(progressBarBg);
+
+        card.appendChild(content);
+        card.appendChild(progressContainer);
+
         projectGrid.appendChild(card);
     });
 }
@@ -233,15 +276,56 @@ function renderTasks() {
     tasks.forEach(t => {
         const li = document.createElement('li');
         li.className = `task-item ${t.status === 'completed' ? 'completed' : ''}`;
-        li.innerHTML = `
-                    <div class="checkbox" onclick="toggleTask(${t.id}, '${t.status}')"></div>
-                    <div class="task-content">
-                        <div class="task-title">${escapeHtml(t.title)}</div>
-                        ${t.description ? `<div class="task-desc">${escapeHtml(t.description)}</div>` : ''}
-                    </div>
-                    <button class="btn-secondary" style="padding: 5px 10px; margin-right: 5px;" onclick="executeTask(${t.id}, this)">▶️</button>
-                    <button class="btn-danger" onclick="deleteTask(${t.id})">&times;</button>
-                `;
+
+        // Checkbox
+        const checkbox = document.createElement('div');
+        checkbox.className = 'checkbox';
+        checkbox.onclick = (e) => {
+            e.stopPropagation();
+            toggleTask(t.id, t.status);
+        };
+
+        // Content
+        const content = document.createElement('div');
+        content.className = 'task-content';
+
+        const title = document.createElement('div');
+        title.className = 'task-title';
+        title.textContent = t.title;
+
+        content.appendChild(title);
+
+        if (t.description) {
+            const desc = document.createElement('div');
+            desc.className = 'task-desc';
+            desc.textContent = t.description;
+            content.appendChild(desc);
+        }
+
+        // Execute Button
+        const executeBtn = document.createElement('button');
+        executeBtn.className = 'btn-secondary';
+        executeBtn.style.cssText = "padding: 5px 10px; margin-right: 5px;";
+        executeBtn.innerHTML = '▶️';
+        executeBtn.onclick = (e) => {
+            e.stopPropagation();
+            executeTask(t.id, executeBtn);
+        };
+
+        // Delete Button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-danger';
+        deleteBtn.innerHTML = '&times;';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteTask(t.id);
+        };
+
+        li.appendChild(checkbox);
+        li.appendChild(content);
+        li.appendChild(executeBtn);
+        li.appendChild(deleteBtn);
+
         taskListEl.appendChild(li);
     });
 }
@@ -292,3 +376,10 @@ function connectWs() {
 // Init
 fetchProjects();
 connectWs();
+
+// Expose functions to window for inline onclick handlers
+window.showProject = showProject;
+window.deleteProject = deleteProject;
+window.toggleTask = toggleTask;
+window.executeTask = executeTask;
+window.deleteTask = deleteTask;

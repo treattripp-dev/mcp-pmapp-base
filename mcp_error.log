@@ -1,3 +1,5 @@
-[2025-12-05T21:00:18.412Z] Launcher started...
-ERROR: WebSocketServer: Port 3000 is in use. Skipping WebSocket setup for this instance.
-ERROR: Port 3000 is already in use. Assuming this is a subprocess for MCP tools and skipping web server start.
+[2025-12-05T22:45:49.870Z] Launcher started...
+ERROR: Execution stderr: (node:14064) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Loaded cached credentials.
+

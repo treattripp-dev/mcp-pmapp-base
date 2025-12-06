@@ -248,8 +248,11 @@ const httpServer = server.listen(3000, () => {
 
 httpServer.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
-        // Use console.log instead of console.error to avoid triggering CLI error detection
-        console.log('Port 3000 is already in use. Assuming this is a subprocess for MCP tools and skipping web server start.');
+        // SILENT EXIT REQUIRED:
+        // We must NOT use console.log here because it writes to stdout.
+        // The MCP CLI reads stdout for protocol messages (JSON-RPC).
+        // Any non-JSON output (like this log) corrupts the protocol, causing the CLI to hang or error.
+        // This process is likely a subprocess started by 'gemini run', so we just exit silently.
     } else {
         console.error('Server error:', e);
         process.exit(1);
