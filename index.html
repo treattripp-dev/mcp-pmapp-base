@@ -20,6 +20,13 @@
         <header>
             <div class="app-title">TaskFlow</div>
             <div style="display: flex; gap: 10px;">
+                <div class="toggle-container" style="display: flex; align-items: center; gap: 8px; margin-right: 15px;">
+                    <span style="font-size: 0.9rem; color: #64748b;">Auto-Run</span>
+                    <label class="switch">
+                        <input type="checkbox" id="autoRunToggle" onchange="toggleAutoRun()">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
                 <button class="btn btn-secondary" onclick="openSettingsModal()" title="Settings">⚙️</button>
                 <button class="btn" onclick="openNewProjectModal()">+ New Project</button>
             </div>

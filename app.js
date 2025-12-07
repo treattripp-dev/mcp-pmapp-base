@@ -12,7 +12,9 @@ const currentProjectTitle = document.getElementById('currentProjectTitle');
 const newProjectModal = document.getElementById('newProjectModal');
 const settingsModal = document.getElementById('settingsModal');
 const statusIndicator = document.getElementById('statusIndicator');
+
 const statusText = document.getElementById('statusText');
+const autoRunToggle = document.getElementById('autoRunToggle');
 
 // Config
 let BACKEND_URL = localStorage.getItem('backend_url') || 'http://localhost:3000';
@@ -74,6 +76,41 @@ function saveSettings() {
 }
 
 // --- API & Logic ---
+
+
+
+async function checkWorkerStatus() {
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/worker/status`, { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            updateAutoRunUI(data.active);
+        }
+    } catch (err) {
+        console.error("Failed to check worker status", err);
+    }
+}
+
+async function toggleAutoRun() {
+    const isChecked = autoRunToggle.checked;
+    const endpoint = isChecked ? '/api/worker/start' : '/api/worker/stop';
+
+    try {
+        const res = await fetch(`${BACKEND_URL}${endpoint}`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) {
+            // Revert UI if failed
+            autoRunToggle.checked = !isChecked;
+            alert("Failed to toggle worker");
+        }
+    } catch (err) {
+        console.error(err);
+        autoRunToggle.checked = !isChecked;
+    }
+}
+
+function updateAutoRunUI(active) {
+    if (autoRunToggle) autoRunToggle.checked = active;
+}
 
 async function fetchProjects() {
     try {
@@ -177,9 +214,17 @@ async function executeTask(id, btn) {
     try {
         const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute`, { method: 'POST', credentials: 'include' });
         if (!res.ok) throw new Error((await res.json()).error);
+
+        // Show success state briefly
+        btn.innerHTML = '✅ Queued';
+        setTimeout(() => {
+            if (document.body.contains(btn)) {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }, 1500);
     } catch (err) {
         alert("Execution failed: " + err.message);
-    } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
@@ -373,6 +418,7 @@ function updateStatus(connected) {
     if (connected) {
         statusIndicator.className = 'status-indicator status-connected';
         statusText.textContent = 'Connected';
+        checkWorkerStatus(); // Check worker status on connection
     } else {
         statusIndicator.className = 'status-indicator status-disconnected';
         statusText.textContent = 'Disconnected';
@@ -408,6 +454,8 @@ function connectWs() {
 // Init
 fetchProjects();
 connectWs();
+// Expose toggle
+window.toggleAutoRun = toggleAutoRun;
 
 // Expose functions to window for inline onclick handlers
 window.showProject = showProject;

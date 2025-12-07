@@ -1,3 +1,16 @@
-[2025-12-07T13:15:50.020Z] Launcher started...
-[2025-12-07T13:16:25.917Z] REQUEST: GET /.well-known/appspecific/com.chrome.devtools.json
-ERROR: [2025-12-07T13:16:25.917Z] REQUEST: GET /.well-known/appspecific/com.chrome.devtools.json
+[2025-12-07T13:53:57.708Z] Launcher started...
+ERROR: Task App running at http://localhost:3000
+[2025-12-07T13:54:00.099Z] REQUEST: GET /api/worker/status
+ERROR: [2025-12-07T13:54:00.099Z] REQUEST: GET /api/worker/status
+[2025-12-07T13:54:20.793Z] REQUEST: POST /api/tasks/55/execute
+ERROR: [2025-12-07T13:54:20.793Z] REQUEST: POST /api/tasks/55/execute
+[2025-12-07T13:54:49.740Z] REQUEST: DELETE /api/tasks/52
+ERROR: [2025-12-07T13:54:49.740Z] REQUEST: DELETE /api/tasks/52
+[2025-12-07T13:54:52.384Z] REQUEST: DELETE /api/tasks/55
+ERROR: [2025-12-07T13:54:52.384Z] REQUEST: DELETE /api/tasks/55
+[2025-12-07T13:54:55.976Z] REQUEST: POST /api/tasks
+ERROR: [2025-12-07T13:54:55.976Z] REQUEST: POST /api/tasks
+[2025-12-07T13:54:57.183Z] REQUEST: POST /api/worker/start
+ERROR: [2025-12-07T13:54:57.183Z] REQUEST: POST /api/worker/start
+[2025-12-07T13:55:10.914Z] REQUEST: POST /api/tasks/56/execute
+ERROR: [2025-12-07T13:55:10.914Z] REQUEST: POST /api/tasks/56/execute

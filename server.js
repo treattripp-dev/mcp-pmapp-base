@@ -1,7 +1,8 @@
 import 'dotenv/config'; // Load .env
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { WebSocketServer } from "ws";
@@ -166,63 +167,24 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
     if (fetchError) return res.status(500).json({ error: fetchError.message });
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    // 2. Execute via MCP Sampling (reuse existing connection)
-    console.log(`Requesting execution via MCP Sampling for task: ${task.title}`);
-
-    try {
-        // Construct the prompt for the agent
-        const prompt = `Please execute this task: "${task.title}". \n\nTask Description: ${task.description || ''}`;
-
-        // Send sampling request to the client (Gemini/IDE)
-        // Note: This relies on the server being connected to a client that supports sampling.
-        const result = await mcpServer.createMessage({
-            messages: [
-                { role: "user", content: { type: "text", text: prompt } }
-            ],
-            includeContext: "none", // Reduced from 'all' to avoid timeouts
-            maxTokens: 4000,
-            systemPrompt: "You are an agentic assistant executing a task. You have access to tools. Use them to complete the user's request."
-        });
-
-        // 3. Process Result
-        const outputContent = result.content;
-        let outputText = "";
-
-        if (outputContent.type === 'text') {
-            outputText = outputContent.text;
-        } else if (Array.isArray(outputContent)) {
-            outputText = outputContent.map(c => c.text || JSON.stringify(c)).join('\n');
-        } else {
-            outputText = JSON.stringify(outputContent);
-        }
-
-        console.log(`Execution Output: ${outputText.substring(0, 100)}...`);
-
-        // 4. Update task description
-        const { data: updatedTask, error: updateError } = await supabase
-            .from('tasks')
-            .update({ description: outputText })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (updateError) return res.status(500).json({ error: updateError.message });
-
-        broadcastTasks(null, updatedTask.project_id);
-        broadcastProjects();
-        res.json(updatedTask);
-
-    } catch (error) {
-        const errorMsg = `[${new Date().toISOString()}] ERROR Execution failed for task "${task.title}": ${error.stack || error.message}`;
-        console.error(errorMsg);
-        try {
-            fs.appendFileSync('mcp_error.log', errorMsg + '\n');
-        } catch (e) { /* ignore write error */ }
-
-        return res.status(500).json({
-            error: `Execution via Gemini failed. Details: ${error.message}. Check mcp_error.log for details.`
-        });
+    // 2. Mark as QUEUED (Pull-based pattern)
+    // Instead of pushing via Sampling (which fails on CLI), we mark it for the Agent to pick up.
+    if (task.title.startsWith('[QUEUED]')) {
+        return res.json(task); // Already queued
     }
+
+    const { data: updatedTask, error: updateError } = await supabase
+        .from('tasks')
+        .update({ title: `[QUEUED] ${task.title}` })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    broadcastTasks(null, updatedTask.project_id);
+    broadcastProjects();
+    res.json(updatedTask);
 });
 
 app.post('/api/tasks/:id/execute-spawn', async (req, res) => {
@@ -268,6 +230,55 @@ app.post('/api/tasks/:id/execute-spawn', async (req, res) => {
             res.json(updatedTask);
         }
     });
+});
+
+
+
+// --- Worker Management ---
+let workerProcess = null;
+
+app.get('/api/worker/status', (req, res) => {
+    res.json({ active: !!workerProcess, pid: workerProcess?.pid });
+});
+
+app.post('/api/worker/start', (req, res) => {
+    if (workerProcess) {
+        return res.json({ message: "Worker already running", pid: workerProcess.pid });
+    }
+
+    console.log("Starting worker process...");
+    // Spawn detached so it survives if main process restarts? No, we want it managed.
+    workerProcess = spawn(process.execPath, ['worker_loop.js'], {
+        stdio: 'inherit', // Pipe output to main console
+        cwd: __dirname
+    });
+
+    workerProcess.on('spawn', () => {
+        console.log(`Worker started with PID: ${workerProcess.pid}`);
+    });
+
+    workerProcess.on('error', (err) => {
+        console.error(`Worker failed to start: ${err.message}`);
+        workerProcess = null;
+    });
+
+    workerProcess.on('exit', (code, signal) => {
+        console.log(`Worker exited with code ${code} and signal ${signal}`);
+        workerProcess = null;
+    });
+
+    res.json({ message: "Worker started" });
+});
+
+app.post('/api/worker/stop', (req, res) => {
+    if (!workerProcess) {
+        return res.json({ message: "Worker not running" });
+    }
+
+    console.log("Stopping worker process...");
+    workerProcess.kill(); // SIGTERM
+    workerProcess = null;
+    res.json({ message: "Worker stopped" });
 });
 
 // --- WebSocket Logic ---
@@ -490,6 +501,29 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     throw new Error("Tool not found");
 });
 
+
+
+// --- SSE Transport ---
+let sseTransport = null;
+
+app.get('/sse', async (req, res) => {
+    console.log("New SSE connection established");
+    sseTransport = new SSEServerTransport("/messages", res);
+    await mcpServer.connect(sseTransport);
+
+    req.on('close', () => {
+        console.log("SSE connection closed");
+        sseTransport = null;
+    });
+});
+
+app.post('/messages', async (req, res) => {
+    if (sseTransport) {
+        await sseTransport.handlePostMessage(req, res);
+    } else {
+        res.status(404).json({ error: "No active SSE connection" });
+    }
+});
 
 const transport = new StdioServerTransport();
 await mcpServer.connect(transport);

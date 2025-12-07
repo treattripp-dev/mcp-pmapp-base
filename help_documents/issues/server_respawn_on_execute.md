@@ -44,7 +44,8 @@ The application now supports two execution modes:
 -   **Cons**: Slower startup time and causes log noise (`EADDRINUSE`).
 
 ## 2. Play ▶️ (Session Mode)
--   **Method**: Uses **MCP Sampling** (`mcpServer.createMessage`).
--   **Behavior**: Attempts to ask the *currently connected* Gemini/IDE agent to perform the task directly without starting a new process.
--   **Error**: `MCP error -32601: Method not found`.
--   **Cause**: This error means the current client (the Gemini CLI or IDE window you are using) **does not support Sampling**. It is unable to accept "tasks" sent from the server back to the client. It only supports Client -> Server requests (Tools), not Server -> Client requests (Sampling).
+-   **Method**: **Queue + Agent Pull**.
+-   **Behavior**: When clicked, the server prepends `[QUEUED]` to the task title. It does **NOT** try to run it immediately.
+-   **Requirement**: You must have an Agent (like Gemini) running a "Worker Loop" (e.g., `gemini run worker_prompt.md`). This agent will see the queued task and execute it.
+-   **Pros**: Fast, no server respawns, persistent connection.
+-   **Cons**: Requires a running agent loop to process tasks.
