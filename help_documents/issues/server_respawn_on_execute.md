@@ -32,3 +32,19 @@ Once `gemini run` completes its task:
 
 ## Conclusion
 The "respawning" you observe is actually a **temporary, secondary instance** of the server being created solely for the duration of the `gemini run` command. This is necessary for Gemini to access the MCP tools defined in your project.
+
+# Execution Modes Explained
+
+The application now supports two execution modes:
+
+## 1. Rocket 🚀 (Spawn Mode)
+-   **Method**: Uses `child_process.exec` to run `gemini run "<task>"`.
+-   **Behavior**: Spawns a **FRESH** Gemini CLI process. This new process starts its own temporary server instance (Server B), causing the "respawn" logs.
+-   **Pros**: Works reliably because it starts a clean environment.
+-   **Cons**: Slower startup time and causes log noise (`EADDRINUSE`).
+
+## 2. Play ▶️ (Session Mode)
+-   **Method**: Uses **MCP Sampling** (`mcpServer.createMessage`).
+-   **Behavior**: Attempts to ask the *currently connected* Gemini/IDE agent to perform the task directly without starting a new process.
+-   **Error**: `MCP error -32601: Method not found`.
+-   **Cause**: This error means the current client (the Gemini CLI or IDE window you are using) **does not support Sampling**. It is unable to accept "tasks" sent from the server back to the client. It only supports Client -> Server requests (Tools), not Server -> Client requests (Sampling).

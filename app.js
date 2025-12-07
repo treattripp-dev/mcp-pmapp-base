@@ -185,6 +185,25 @@ async function executeTask(id, btn) {
     }
 }
 
+async function executeTaskSpawn(id, btn) {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '🚀...';
+    btn.disabled = true;
+    try {
+        // This request might take a long time or timeout, but the server will process it.
+        // We don't want to block the UI forever, but we should show activity.
+        const res = await fetch(`${BACKEND_URL}/api/tasks/${id}/execute-spawn`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) throw new Error((await res.json()).error);
+    } catch (err) {
+        console.log("Spawn execution initiated (might be running in bg): " + err.message);
+    } finally {
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 2000); // Re-enable after a short delay so user knows it was sent
+    }
+}
+
 // --- Rendering ---
 
 function renderProjects() {
@@ -302,14 +321,26 @@ function renderTasks() {
             content.appendChild(desc);
         }
 
-        // Execute Button
+        // Execute Button (Session)
         const executeBtn = document.createElement('button');
         executeBtn.className = 'btn-secondary';
         executeBtn.style.cssText = "padding: 5px 10px; margin-right: 5px;";
         executeBtn.innerHTML = '▶️';
+        executeBtn.title = "Execute in Current Session (Fast)";
         executeBtn.onclick = (e) => {
             e.stopPropagation();
             executeTask(t.id, executeBtn);
+        };
+
+        // Execute Button (Spawn)
+        const spawnBtn = document.createElement('button');
+        spawnBtn.className = 'btn-secondary';
+        spawnBtn.style.cssText = "padding: 5px 10px; margin-right: 5px;";
+        spawnBtn.innerHTML = '🚀';
+        spawnBtn.title = "Execute via New Process (Clean Context)";
+        spawnBtn.onclick = (e) => {
+            e.stopPropagation();
+            executeTaskSpawn(t.id, spawnBtn);
         };
 
         // Delete Button
@@ -324,6 +355,7 @@ function renderTasks() {
         li.appendChild(checkbox);
         li.appendChild(content);
         li.appendChild(executeBtn);
+        li.appendChild(spawnBtn);
         li.appendChild(deleteBtn);
 
         taskListEl.appendChild(li);
@@ -382,4 +414,5 @@ window.showProject = showProject;
 window.deleteProject = deleteProject;
 window.toggleTask = toggleTask;
 window.executeTask = executeTask;
+window.executeTaskSpawn = executeTaskSpawn;
 window.deleteTask = deleteTask;

@@ -1,4 +1,5 @@
 import 'dotenv/config'; // Load .env
+import { exec } from 'child_process';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -9,7 +10,7 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import { z } from "zod";
 import { createClient } from '@supabase/supabase-js';
-import { exec } from 'child_process';
+
 import cors from 'cors';
 
 // Paths setup
@@ -41,6 +42,22 @@ let wss = null;
 
 // Serve static files (css, js)
 app.use(express.static(__dirname));
+
+// Serve static files (css, js)
+app.use(express.static(__dirname));
+
+// middleware to log all requests to stderr (for debugging/mcp_error.log)
+import fs from 'fs';
+app.use((req, res, next) => {
+    const msg = `[${new Date().toISOString()}] REQUEST: ${req.method} ${req.url}\n`;
+    try {
+        fs.appendFileSync('mcp_error.log', msg);
+    } catch (e) {
+        console.error("Failed to write to log:", e);
+    }
+    console.error(msg.trim());
+    next();
+});
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
@@ -149,26 +166,42 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
     if (fetchError) return res.status(500).json({ error: fetchError.message });
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    // 2. Execute via CLI
-    const command = `gemini run "${task.title}"`;
-    console.log(`Executing: ${command}`);
+    // 2. Execute via MCP Sampling (reuse existing connection)
+    console.log(`Requesting execution via MCP Sampling for task: ${task.title}`);
 
-    exec(command, async (error, stdout, stderr) => {
-        if (error) {
-            console.error(`Execution error: ${error.message}`);
-            return res.status(500).json({ error: `Execution failed: ${error.message}` });
+    try {
+        // Construct the prompt for the agent
+        const prompt = `Please execute this task: "${task.title}". \n\nTask Description: ${task.description || ''}`;
+
+        // Send sampling request to the client (Gemini/IDE)
+        // Note: This relies on the server being connected to a client that supports sampling.
+        const result = await mcpServer.createMessage({
+            messages: [
+                { role: "user", content: { type: "text", text: prompt } }
+            ],
+            includeContext: "none", // Reduced from 'all' to avoid timeouts
+            maxTokens: 4000,
+            systemPrompt: "You are an agentic assistant executing a task. You have access to tools. Use them to complete the user's request."
+        });
+
+        // 3. Process Result
+        const outputContent = result.content;
+        let outputText = "";
+
+        if (outputContent.type === 'text') {
+            outputText = outputContent.text;
+        } else if (Array.isArray(outputContent)) {
+            outputText = outputContent.map(c => c.text || JSON.stringify(c)).join('\n');
+        } else {
+            outputText = JSON.stringify(outputContent);
         }
-        if (stderr) {
-            console.warn(`Execution stderr: ${stderr}`);
-        }
 
-        const output = stdout.trim();
-        console.log(`Execution output: ${output}`);
+        console.log(`Execution Output: ${outputText.substring(0, 100)}...`);
 
-        // 3. Update task description
+        // 4. Update task description
         const { data: updatedTask, error: updateError } = await supabase
             .from('tasks')
-            .update({ description: output })
+            .update({ description: outputText })
             .eq('id', id)
             .select()
             .single();
@@ -178,6 +211,62 @@ app.post('/api/tasks/:id/execute', async (req, res) => {
         broadcastTasks(null, updatedTask.project_id);
         broadcastProjects();
         res.json(updatedTask);
+
+    } catch (error) {
+        const errorMsg = `[${new Date().toISOString()}] ERROR Execution failed for task "${task.title}": ${error.stack || error.message}`;
+        console.error(errorMsg);
+        try {
+            fs.appendFileSync('mcp_error.log', errorMsg + '\n');
+        } catch (e) { /* ignore write error */ }
+
+        return res.status(500).json({
+            error: `Execution via Gemini failed. Details: ${error.message}. Check mcp_error.log for details.`
+        });
+    }
+});
+
+app.post('/api/tasks/:id/execute-spawn', async (req, res) => {
+    const id = req.params.id; // UUID is a string
+
+    // 1. Get the task
+    const { data: task, error: fetchError } = await supabase.from('tasks').select('*').eq('id', id).single();
+    if (fetchError) return res.status(500).json({ error: fetchError.message });
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    // 2. Execute via CLI (Spawn Mode)
+    // This allows a fresh context, useful for when the current session context is polluted or insufficient.
+    const command = `gemini run "${task.title.replace(/"/g, '\\"')}"`; // Simple escaping
+    console.log(`[Spawn Mode] Executing: ${command}`);
+
+    exec(command, async (error, stdout, stderr) => {
+        if (error) {
+            console.error(`[Spawn Mode] Execution error: ${error.message}`);
+            // We verify if it was just a timeout or a real error, but for now we log it.
+            // Note: gemini run might return non-zero if the agent failed, but we still validly attempted it.
+        }
+
+        const output = (stdout + stderr).trim();
+        console.log(`[Spawn Mode] Output length: ${output.length} characters`);
+
+        // 3. Update task description
+        const { data: updatedTask, error: updateError } = await supabase
+            .from('tasks')
+            .update({ description: output || "Executed (No Output)" })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) return res.status(500).json({ error: updateError.message });
+
+        broadcastTasks(null, updatedTask.project_id);
+        broadcastProjects();
+        // Since this is async/spawned, we might have already responded. 
+        // But here we respond to the HTTP request now that it's done (or timed out).
+        // For very long tasks, the HTTP request might timeout on the client side, 
+        // but the server logic still runs.
+        if (!res.headersSent) {
+            res.json(updatedTask);
+        }
     });
 });
 
