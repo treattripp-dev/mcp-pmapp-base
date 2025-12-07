@@ -2,7 +2,8 @@ import 'dotenv/config'; // Load .env
 import { exec } from 'child_process';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+//need to chechk what it is used for 
+import { CallToolRequestSchema, ListToolsRequestSchema, ListPromptsRequestSchema, GetPromptRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { WebSocketServer } from "ws";
 import http from "http";
@@ -157,117 +158,81 @@ app.delete('/api/tasks/:id', async (req, res) => {
     res.status(204).send();
 });
 
-// --- Execute Endpoint ---
+// // Shared Spawn Logic
+// async function executeViaSpawn(task, res) {
+//     const command = `gemini run "${task.title.replace(/"/g, '\\"')}"`;
+//     console.error(`[Spawn Mode] Executing (Fallback/Direct): ${command}`);
+
+//     exec(command, async (error, stdout, stderr) => {
+//         if (error) {
+//             console.error(`[Spawn Mode] Execution error: ${error.message}`);
+//         }
+
+//         const output = (stdout + stderr).trim();
+//         console.error(`[Spawn Mode] Output length: ${output.length} characters`);
+
+//         const { data: updatedTask, error: updateError } = await supabase
+//             .from('tasks')
+//             .update({ description: output || "Executed (No Output)" })
+//             .eq('id', task.id)
+//             .select()
+//             .single();
+
+//         if (updateError) {
+//             if (!res.headersSent) return res.status(500).json({ error: updateError.message });
+//             return;
+//         }
+
+//         broadcastTasks(null, updatedTask.project_id);
+//         broadcastProjects();
+
+//         if (!res.headersSent) {
+//             res.json(updatedTask);
+//         }
+//     });
+// }
+
+// --- Execute Endpoint (Pull Model) ---
+// This endpoint marks a task as "queued" for execution.
+// The actual execution is done by ChatGPT polling via the list_tasks tool.
+// NOTE: We use [QUEUED] prefix in description instead of status column due to DB constraint.
 app.post('/api/tasks/:id/execute', async (req, res) => {
-    const id = req.params.id; // UUID is a string
+    const id = req.params.id;
 
     // 1. Get the task
     const { data: task, error: fetchError } = await supabase.from('tasks').select('*').eq('id', id).single();
     if (fetchError) return res.status(500).json({ error: fetchError.message });
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    // 2. Execute via MCP Sampling (reuse existing connection)
-    console.log(`Requesting execution via MCP Sampling for task: ${task.title}`);
+    // 2. Mark as "queued" by adding [QUEUED] prefix to description
+    const queuedDescription = task.description?.startsWith('[QUEUED]')
+        ? task.description
+        : `[QUEUED] ${task.description || 'Pending execution...'}`;
 
-    try {
-        // Construct the prompt for the agent
-        const prompt = `Please execute this task: "${task.title}". \n\nTask Description: ${task.description || ''}`;
+    const { data: updatedTask, error: updateError } = await supabase
+        .from('tasks')
+        .update({ description: queuedDescription })
+        .eq('id', id)
+        .select()
+        .single();
 
-        // Send sampling request to the client (Gemini/IDE)
-        // Note: This relies on the server being connected to a client that supports sampling.
-        const result = await mcpServer.createMessage({
-            messages: [
-                { role: "user", content: { type: "text", text: prompt } }
-            ],
-            includeContext: "none", // Reduced from 'all' to avoid timeouts
-            maxTokens: 4000,
-            systemPrompt: "You are an agentic assistant executing a task. You have access to tools. Use them to complete the user's request."
-        });
+    if (updateError) return res.status(500).json({ error: updateError.message });
 
-        // 3. Process Result
-        const outputContent = result.content;
-        let outputText = "";
+    console.error(`[Session Mode] Task "${task.title}" marked as QUEUED. Waiting for ChatGPT Worker to pick it up.`);
 
-        if (outputContent.type === 'text') {
-            outputText = outputContent.text;
-        } else if (Array.isArray(outputContent)) {
-            outputText = outputContent.map(c => c.text || JSON.stringify(c)).join('\n');
-        } else {
-            outputText = JSON.stringify(outputContent);
-        }
+    broadcastTasks(null, updatedTask.project_id);
+    broadcastProjects();
 
-        console.log(`Execution Output: ${outputText.substring(0, 100)}...`);
-
-        // 4. Update task description
-        const { data: updatedTask, error: updateError } = await supabase
-            .from('tasks')
-            .update({ description: outputText })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (updateError) return res.status(500).json({ error: updateError.message });
-
-        broadcastTasks(null, updatedTask.project_id);
-        broadcastProjects();
-        res.json(updatedTask);
-
-    } catch (error) {
-        const errorMsg = `[${new Date().toISOString()}] ERROR Execution failed for task "${task.title}": ${error.stack || error.message}`;
-        console.error(errorMsg);
-        try {
-            fs.appendFileSync('mcp_error.log', errorMsg + '\n');
-        } catch (e) { /* ignore write error */ }
-
-        return res.status(500).json({
-            error: `Execution via Gemini failed. Details: ${error.message}. Check mcp_error.log for details.`
-        });
-    }
+    res.json({ message: "Task queued for execution. ChatGPT Worker will execute it.", task: updatedTask });
 });
 
 app.post('/api/tasks/:id/execute-spawn', async (req, res) => {
-    const id = req.params.id; // UUID is a string
-
-    // 1. Get the task
+    const id = req.params.id;
     const { data: task, error: fetchError } = await supabase.from('tasks').select('*').eq('id', id).single();
     if (fetchError) return res.status(500).json({ error: fetchError.message });
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    // 2. Execute via CLI (Spawn Mode)
-    // This allows a fresh context, useful for when the current session context is polluted or insufficient.
-    const command = `gemini run "${task.title.replace(/"/g, '\\"')}"`; // Simple escaping
-    console.log(`[Spawn Mode] Executing: ${command}`);
-
-    exec(command, async (error, stdout, stderr) => {
-        if (error) {
-            console.error(`[Spawn Mode] Execution error: ${error.message}`);
-            // We verify if it was just a timeout or a real error, but for now we log it.
-            // Note: gemini run might return non-zero if the agent failed, but we still validly attempted it.
-        }
-
-        const output = (stdout + stderr).trim();
-        console.log(`[Spawn Mode] Output length: ${output.length} characters`);
-
-        // 3. Update task description
-        const { data: updatedTask, error: updateError } = await supabase
-            .from('tasks')
-            .update({ description: output || "Executed (No Output)" })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (updateError) return res.status(500).json({ error: updateError.message });
-
-        broadcastTasks(null, updatedTask.project_id);
-        broadcastProjects();
-        // Since this is async/spawned, we might have already responded. 
-        // But here we respond to the HTTP request now that it's done (or timed out).
-        // For very long tasks, the HTTP request might timeout on the client side, 
-        // but the server logic still runs.
-        if (!res.headersSent) {
-            res.json(updatedTask);
-        }
-    });
+    executeViaSpawn(task, res);
 });
 
 // --- WebSocket Logic ---
@@ -337,11 +302,16 @@ const httpServer = server.listen(3000, () => {
 
 httpServer.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
-        // SILENT EXIT REQUIRED:
+        // SILENT EXIT / CONTINUE REQUIRED:
         // We must NOT use console.log here because it writes to stdout.
         // The MCP CLI reads stdout for protocol messages (JSON-RPC).
         // Any non-JSON output (like this log) corrupts the protocol, causing the CLI to hang or error.
-        // This process is likely a subprocess started by 'gemini run', so we just exit silently.
+
+        // In "Spawn Mode", we are likely a subprocess. If the port is taken, it just means
+        // the main dashboard is already running. We can safely ignore this error and
+        // continue running as a pure MCP server (stdio only).
+        console.error('[Wait Mode] Port 3000 in use. Web UI disabled, running as MCP CLient only.');
+        // Do NOT exit process.
     } else {
         console.error('Server error:', e);
         process.exit(1);
@@ -351,7 +321,7 @@ httpServer.on('error', (e) => {
 // --- MCP Server ---
 const mcpServer = new Server(
     { name: "task-manager", version: "1.0.0" },
-    { capabilities: { tools: {} } }
+    { capabilities: { tools: {}, prompts: {} } }
 );
 
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -399,14 +369,15 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             {
                 name: "update_task",
-                description: "Update a task's status (e.g., mark as completed)",
+                description: "Update a task's status and/or description",
                 inputSchema: {
                     type: "object",
                     properties: {
                         id: { type: "string", description: "ID of the task to update" },
-                        status: { type: "string", enum: ["pending", "completed"], description: "New status" }
+                        status: { type: "string", enum: ["pending", "completed"], description: "New status" },
+                        description: { type: "string", description: "New description (result of execution)" }
                     },
-                    required: ["id", "status"]
+                    required: ["id"]
                 },
             },
             {
@@ -422,6 +393,58 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
             }
         ],
     };
+});
+
+mcpServer.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return {
+        prompts: [
+            {
+                name: "execute_task",
+                description: "Load a task into the context for execution",
+                arguments: [
+                    {
+                        name: "task_id",
+                        description: "The ID of the task to execute",
+                        required: true
+                    }
+                ]
+            }
+        ]
+    };
+});
+
+mcpServer.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    if (name === "execute_task") {
+        const taskId = args?.task_id;
+        if (!taskId) {
+            throw new Error("task_id argument is required");
+        }
+
+        const { data: task, error } = await supabase.from('tasks').select('*').eq('id', taskId).single();
+        if (error || !task) {
+            return {
+                messages: [
+                    { role: "user", content: { type: "text", text: `Error: Task not found or failed to fetch (ID: ${taskId})` } }
+                ]
+            };
+        }
+
+        return {
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text: `Please execute this task: "${task.title}".\n\nTask Description: ${task.description || ''}\n\nProject ID: ${task.project_id}`
+                    }
+                }
+            ]
+        };
+    }
+
+    throw new Error("Prompt not found");
 });
 
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -460,18 +483,27 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { data: tasks, error } = await query;
         if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
 
-        const taskList = tasks.map(t => `[${t.status === 'completed' ? 'X' : ' '}] #${t.id}: ${t.title}`).join('\n');
+        // Include description to show [QUEUED] status
+        const taskList = tasks.map(t => {
+            const statusMark = t.status === 'completed' ? 'X' : (t.description?.startsWith('[QUEUED]') ? 'Q' : ' ');
+            const desc = t.description ? ` | ${t.description.substring(0, 50)}` : '';
+            return `[${statusMark}] #${t.id}: ${t.title}${desc}`;
+        }).join('\n');
         return { content: [{ type: "text", text: taskList || "No tasks found." }] };
     }
 
     if (name === "update_task") {
-        const { id, status } = args;
-        const { data, error } = await supabase.from('tasks').update({ status }).eq('id', id).select().single();
+        const { id, status, description } = args;
+        const updates = {};
+        if (status) updates.status = status;
+        if (description) updates.description = description;
+
+        const { data, error } = await supabase.from('tasks').update(updates).eq('id', id).select().single();
         if (error) return { isError: true, content: [{ type: "text", text: `Error: ${error.message}` }] };
 
         broadcastTasks(null, data.project_id);
         broadcastProjects();
-        return { content: [{ type: "text", text: `Task #${id} updated to ${status}` }] };
+        return { content: [{ type: "text", text: `Task #${id} updated. Status: ${data.status}, Description: ${data.description?.substring(0, 50)}...` }] };
     }
 
     if (name === "delete_task") {

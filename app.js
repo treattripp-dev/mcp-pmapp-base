@@ -294,7 +294,13 @@ function renderTasks() {
 
     tasks.forEach(t => {
         const li = document.createElement('li');
-        li.className = `task-item ${t.status === 'completed' ? 'completed' : ''}`;
+        // Detect queued state from [QUEUED] prefix in description
+        const isQueued = t.description?.startsWith('[QUEUED]');
+        // Add status-specific classes
+        let statusClass = '';
+        if (t.status === 'completed') statusClass = 'completed';
+        else if (isQueued) statusClass = 'queued';
+        li.className = `task-item ${statusClass}`;
 
         // Checkbox
         const checkbox = document.createElement('div');
@@ -314,19 +320,26 @@ function renderTasks() {
 
         content.appendChild(title);
 
-        if (t.description) {
+        // Show status badge for queued tasks
+        if (isQueued) {
+            const badge = document.createElement('span');
+            badge.className = 'status-badge queued-badge';
+            badge.textContent = '⏳ Waiting for Agent...';
+            content.appendChild(badge);
+        } else if (t.description) {
             const desc = document.createElement('div');
             desc.className = 'task-desc';
             desc.textContent = t.description;
             content.appendChild(desc);
         }
 
-        // Execute Button (Session)
+        // Execute Button (Session) - Disable if already queued
         const executeBtn = document.createElement('button');
         executeBtn.className = 'btn-secondary';
         executeBtn.style.cssText = "padding: 5px 10px; margin-right: 5px;";
-        executeBtn.innerHTML = '▶️';
-        executeBtn.title = "Execute in Current Session (Fast)";
+        executeBtn.innerHTML = isQueued ? '⏳' : '▶️';
+        executeBtn.title = isQueued ? "Task is queued..." : "Queue for Execution";
+        executeBtn.disabled = isQueued;
         executeBtn.onclick = (e) => {
             e.stopPropagation();
             executeTask(t.id, executeBtn);

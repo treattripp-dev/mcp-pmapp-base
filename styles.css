@@ -361,6 +361,39 @@ header {
     margin-top: 4px;
 }
 
+/* Queued Task State */
+.task-item.queued {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: rgba(99, 102, 241, 0.3);
+    animation: pulse-queued 2s infinite;
+}
+
+@keyframes pulse-queued {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 6px;
+}
+
+.queued-badge {
+    background: var(--primary-gradient);
+    color: white;
+}
+
 /* Inputs */
 .input-group {
     display: flex;
